@@ -4,8 +4,6 @@ import os
 import warnings
 import re
 
-import PySimpleGUI as sg
-from gsheets_uploader import Uploader
 from logzero import logger, logfile
 
 from api_utils import authenticate, get_alerts, get_all_apparts, get_all_links, remove_expired
@@ -66,7 +64,7 @@ if not os.path.exists(DATA_PATH):
 
 logfile(LOG_PATH)
 
-def run_all(email, password, expired):
+def run_all(email, password, expired, upload=False):
     s, headers = authenticate(email, password)
 
     if s==None:
@@ -86,19 +84,21 @@ def run_all(email, password, expired):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         try:
-            df_apparts.to_excel(APPARTS_XLSX_PATH, encoding='utf-8')
-        except IllegalCharacterError as e:
-            logger.warn("Some illegal characters were replaced in the dataframe.")
+            df_apparts.to_excel(APPARTS_XLSX_PATH)
+        except IllegalCharacterError:
+            logger.warning("Some illegal characters were replaced in the dataframe.")
             ILLEGAL_CHARACTERS_RE = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
-            df_apparts.applymap(lambda x: ILLEGAL_CHARACTERS_RE.sub(r'', x) if isinstance(x, str) else x).to_excel(APPARTS_XLSX_PATH, encoding='utf-8')
+            df_apparts.map(lambda x: ILLEGAL_CHARACTERS_RE.sub(r'', x) if isinstance(x, str) else x).to_excel(APPARTS_XLSX_PATH)
 
     df_history.to_csv(HISTORY_PATH, sep=';', encoding='utf-8')
 
     if upload:
+        from gsheets_uploader import Uploader
         uploader = Uploader(credentials_path=CREDS_PATH, token_file_path=TOKEN_FILE_PATH, secret_client_path=SECRET_CLIENT_PATH)
         uploader.push_table(df_apparts, spreadsheet_id='131UoWqQwZfydMJ3yqVe-L6TY6NKtJx8zVNppo034dT4', worksheet_name='apparts', index=True)
 
 def create_main_window(credentials_file=CREDENTIALS_FILE):
+    import FreeSimpleGUI as sg
     sg.theme()
     if os.path.exists(credentials_file):
         with open(credentials_file, 'r') as f:
@@ -125,11 +125,12 @@ if __name__=='__main__':
     
     if (args.email==None) and (args.password == None) and (args.load == None) and (args.save == None) and (args.expired == None) \
      and (args.upload == None):
+        import FreeSimpleGUI as sg
         window = None
         while True:
             if window == None:
                 window = create_main_window()
-                event, credentials = window.read() 
+                event, credentials = window.read()
 
             if event == 'Run Application':
                 logger.info('Launching application')
@@ -138,7 +139,7 @@ if __name__=='__main__':
                 expired = credentials['-EXPIRED-']
                 upload = credentials['-UPLOAD-']
                 window.close()
-                run_all(email, password, expired=expired)
+                run_all(email, password, expired=expired, upload=upload)
                 break
 
             if event == 'Save credentials':
@@ -150,22 +151,24 @@ if __name__=='__main__':
             if event in (sg.WIN_CLOSED, 'Exit'):
                 break
     else:
-        if args.load == True:
+        if args.load:
             if os.path.exists(CREDENTIALS_FILE):
                 with open(CREDENTIALS_FILE, 'r') as f:
                     credentials = json.load(f)
                 email = credentials['-EMAIL-']
                 password = credentials['-PASSWORD-']
-        
+
         else:
             email = args.email
             password = args.password
 
-        if args.save == True:
+        if args.save:
             credentials = {'-EMAIL-':email, '-PASSWORD-':password}
             with open(CREDENTIALS_FILE, 'w') as f:
                 json.dump(credentials, f)
 
-        run_all(email, password, expired=args.expired)
+        expired = bool(int(args.expired)) if args.expired is not None else False
+        upload = bool(int(args.upload)) if args.upload is not None else False
+        run_all(email, password, expired=expired, upload=upload)
         
         

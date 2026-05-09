@@ -88,10 +88,10 @@ def get_appart_response(session, row_tuple):
     )
     try:
         response = session.get('https://api.jinka.fr/alert_result_view_ad', headers=headers, params=params)
-    except:
-        logger.warn('Connection interrupted by Jinka. Waiting 30 seconds before retrying.')
+    except Exception:
+        logger.warning('Connection interrupted by Jinka. Waiting 30 seconds before retrying.')
         time.sleep(30)
-        logger.warn('Retrying to establish the connection...')
+        logger.warning('Retrying to establish the connection...')
         response = session.get('https://api.jinka.fr/alert_result_view_ad', headers=headers, params=params)
     return response
 
@@ -206,9 +206,9 @@ def get_all_links(session, df, expired, appart_db_path):
         #df.loc[processed_index, 'true_expired_at'] = df_already_processed['true_expired_at']
     else:
         if os.path.exists(appart_db_path)==False:
-            logger.warn('No preexisting database has been found, generating a new one.')
+            logger.warning('No preexisting database has been found, generating a new one.')
         elif expired:
-            logger.warn('Replacing the previous database in order to check for apparts expiration.')
+            logger.warning('Replacing the previous database in order to check for apparts expiration.')
         unprocessed_index = df.index
         df_already_processed = pd.DataFrame()
     logger.info(f'{len(unprocessed_index)} new links have been detected.')
@@ -230,7 +230,7 @@ def get_all_links(session, df, expired, appart_db_path):
         df.loc[unprocessed_index, 'link'] = links
         #df.loc[unprocessed_index, 'true_expired_at'] = expiration_list
         df_to_append = df.loc[unprocessed_index, ['link']]
-        df_already_processed = df_already_processed.append(df_to_append)
+        df_already_processed = pd.concat([df_already_processed, df_to_append])
         df_already_processed.to_json(appart_db_path, orient='columns')
         #nb_expired = len(df[df['true_expired_at'].notna()])
         #logger.warn(f'{nb_expired} appartments have expired.')
@@ -264,7 +264,7 @@ def get_apparts(session, headers, alert_id, nb_pages):
         r_apparts = session.get(target_url, headers=headers)
         df_temp = pd.DataFrame.from_records(data=r_apparts.json()['ads'])
         df_temp['page'] = page
-        df_apparts = df_apparts.append(df_temp)   
+        df_apparts = pd.concat([df_apparts, df_temp])
     return df_apparts
 
 def get_all_apparts(df_alerts, session, headers):
@@ -278,7 +278,7 @@ def get_all_apparts(df_alerts, session, headers):
         alert_id = alert['id']
         nb_pages = alert['nb_pages']
         df_alert = get_apparts(session, headers, alert_id, nb_pages)
-        df_final = df_final.append(df_alert)
+        df_final = pd.concat([df_final, df_alert])
         logger.info(f'Finished processing the apparts of alert n°{idx + 1}')
     df_final = df_final.set_index('id')
     expired_index = df_final[df_final['expired_at'].notna()].index

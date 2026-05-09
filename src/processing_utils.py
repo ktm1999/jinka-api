@@ -35,12 +35,12 @@ def append_history_df(df, history_path, sep=';'):
     else:
         df_history = pd.DataFrame(columns=df.columns).rename_axis(index='id')
     new_entries = set(df.index) - set(df_history.index)
-    df_to_append = df.loc[new_entries, :]
-    df_history = df_history.append(df_to_append)
+    df_to_append = df.loc[list(new_entries), :]
+    df_history = pd.concat([df_history, df_to_append])
     return df_history
 
 def update_history_df(df, df_history, expired_index):
-    index_to_update = set(df.index).intersection(set(expired_index))
+    index_to_update = list(set(df.index).intersection(set(expired_index)))
     updated_entries = df.loc[index_to_update, :]
     df_history.loc[index_to_update, 'expired_at'] = updated_entries['expired_at']
     return df_history
